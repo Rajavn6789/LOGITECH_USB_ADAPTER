@@ -9,12 +9,7 @@
 
 #include <Joystick.h>
 
-  #define TOTAL_BUTTONS 7
-  // H-shifter mode analog axis thresholds
-  #define X_AXIS_12_ZONE         400
-  #define X_AXIS_56_ZONE         650
-  #define Y_AXIS_TOP_ZONE        800
-  #define Y_AXIS_BOTTOM_ZONE     300
+#define TOTAL_BUTTONS 7
 
   // Create the Joystick
   Joystick_ Joystick(
@@ -26,21 +21,32 @@
   false, false,          // No rudder or throttle
   false, false, false);  // No accelerator, brake, or steering
 
+  // H-shifter mode analog axis thresholds
+  #define X_AXIS_12_ZONE         400
+  #define X_AXIS_56_ZONE         650
+  #define Y_AXIS_TOP_ZONE        800
+  #define Y_AXIS_BOTTOM_ZONE     300
+
+  const int ledPin = 11;
+  const int xAxisPin = A0;
+  const int yAxisPin = A2;
+  const int reverseGearPin = 2;
+
   void setup() {
-    pinMode(A0, INPUT_PULLUP);   // X axis
-    pinMode(A2, INPUT_PULLUP);   // Y axis
-    pinMode(2, INPUT); // Reverse
+    pinMode(xAxisPin, INPUT_PULLUP);   // X axis
+    pinMode(yAxisPin, INPUT_PULLUP);   // Y axis
+    pinMode(reverseGearPin, INPUT); // Reverse
+
     // Initialize Joystick Library
     Joystick.begin();
   }
 
- 
   void loop() {
     int x = analogRead(0);                 // X axis
     int y = analogRead(2);                 // Y axis
-    int _isreverse = digitalRead(2);       // ReverseGear
+    int isreverse = digitalRead(2);        // Reverse
 
-    if( _isreverse == 1 ){
+    if(isreverse){
       putGear(7);
     } else
     {
@@ -61,24 +67,18 @@
         if(y < Y_AXIS_BOTTOM_ZONE) putGear(4);
       }
     }
-    delay(50);
   }
 
   void putGear(int gearno){
-    // Clear all other gears
     releaseGearsExceptCurrent(gearno);
-
-    // Put gear
     Joystick.setButton(gearno - 1, HIGH);
-    delay(50);
   }
 
    void releaseGear(int gearno){
     Joystick.setButton(gearno - 1, LOW);    
-    delay(50);
   }
 
-   void releaseGearsExceptCurrent(int gearno){
+  void releaseGearsExceptCurrent(int gearno){
      for(int i = 0; i <= TOTAL_BUTTONS ; i++ ){
       if (i == gearno - 1) continue;
       Joystick.setButton(i, LOW);  
