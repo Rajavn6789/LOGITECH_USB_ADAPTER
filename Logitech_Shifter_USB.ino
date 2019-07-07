@@ -1,146 +1,143 @@
-
-//Logitech Driving Force Shifter USB Adapter 
+//Logitech Driving Force Shifter USB Adapter
 //By Armandoiglesias 2018
 //Based on Jason Duncan functionreturnfunction Project
 //Video tutorial https://www.youtube.com/watch?v=dLpWEu8kCec
 //Use Arduino Leonardo
-//Install Joystick Library 
+//Install Joystick Library
 //Attribution-NonCommercial-NoDerivatives 4.0 International
-
+// Removed all sequential logic, since https://www.thrustmaster.com/en_US/products/ferrari-racing-wheel-red-legend-edition has inbuilt sequential gears
 
 #include <Joystick.h>
+#include <LedControl.h>
 
-// Create the Joystick
-Joystick_ Joystick;
+#define TOTAL_BUTTONS 7
+  // Create the Joystick
+  Joystick_ Joystick(
+  JOYSTICK_DEFAULT_REPORT_ID,
+  JOYSTICK_TYPE_GAMEPAD,
+  TOTAL_BUTTONS, 0,      // Button Count, Hat Switch Count
+  true, true, false,     // X and Y, but no Z Axis
+  false, false, false,   // No Rx, Ry, or Rz
+  false, false,          // No rudder or throttle
+  false, false, false);  // No accelerator, brake, or steering
 
-// H-shifter mode analog axis thresholds
-#define HS_XAXIS_12        400
-#define HS_XAXIS_56        500
-#define HS_YAXIS_135       800
-#define HS_YAXIS_246       300
+  // H-shifter mode analog axis thresholds
+  #define X_AXIS_12_ZONE         400
+  #define X_AXIS_56_ZONE         650
+  #define Y_AXIS_TOP_ZONE        800
+  #define Y_AXIS_BOTTOM_ZONE     300
 
-// Sequential shifter mode analog axis thresholds
-#define SS_UPSHIFT_BEGIN   670
-#define SS_UPSHIFT_END     600
-#define SS_DOWNSHIFT_BEGIN 430
-#define SS_DOWNSHIFT_END   500
+  // Constants
+  const int xAxisPin = A0;
+  const int yAxisPin = A1;
+  const int reverseGearPin = 2;
+  const int DIN = 12;
+  const int CS =  11;
+  const int CLK = 10;
 
-// Handbrake mode analog axis limits
-#define HB_MAXIMUM         530
-#define HB_MINIMUM         400
-#define HB_RANGE           (HB_MAXIMUM-HB_MINIMUM)
+  byte neutral[8]={0x66,0x76,0x76,0x7e,0x6e,0x6e,0x66,0x66};
+  byte one[8]={0x10,0x30,0x10,0x10,0x10,0x10,0x10,0x38};
+  byte two[8]={0x38,0x44,0x04,0x04,0x08,0x10,0x20,0x7C};
+  byte three[8]={0x38,0x44,0x04,0x18,0x04,0x04,0x44,0x38};
+  byte four[8]={0x04,0x0C,0x14,0x24,0x44,0x7E,0x04,0x04};
+  byte five[8]={0x7C,0x40,0x40,0x78,0x04,0x04,0x44,0x38};
+  byte six[8]={0x38,0x44,0x40,0x78,0x44,0x44,0x44,0x38};
+  byte reverse[8]={0x7e,0x7e,0x62,0x7e,0x7c,0x66,0x66,0x66};
 
-// Digital inputs definitions
-#define DI_REVERSE         1
-#define DI_MODE            3
-#define DI_RED_CENTERRIGHT 4
-#define DI_RED_CENTERLEFT  5
-#define DI_RED_RIGHT       6
-#define DI_RED_LEFT        7
-#define DI_BLACK_TOP       8
-#define DI_BLACK_RIGHT     9
-#define DI_BLACK_LEFT      10
-#define DI_BLACK_BOTTOM    11
-#define DI_DPAD_RIGHT      12
-#define DI_DPAD_LEFT       13
-#define DI_DPAD_BOTTOM     14
-#define DI_DPAD_TOP        15
-
-// Shifter state
-#define DOWN_SHIFT         -1
-#define NO_SHIFT           0
-#define UP_SHIFT           1
-
-// Shifter mode
-#define SHIFTER_MODE       0
-#define HANDBRAKE_MODE     1
-
-// LED blink counter
-int led=0;
-
-// Shifter state
-int shift=NO_SHIFT;
-
-// Handbrake mode
-int mode=SHIFTER_MODE;
-
-int b[16];
-
-int gear=0;                          // Default value is neutral
-
-// Constant that maps the phyical pin to the joystick button.
-//const int pinToButtonMap = 9;
-
-void setup() {
-   // G29 shifter analog inputs configuration 
-  pinMode(A0, INPUT_PULLUP);   // X axis
-  pinMode(A2, INPUT_PULLUP);   // Y axis
-
-  pinMode(2, INPUT); 
+  LedControl lc=LedControl(DIN,CLK,CS,1);
 
 
-  for(int i=0; i<16; i++) b[i] = 0;
-  b[DI_MODE] =0;
-  // Initialize Joystick Library
-  Joystick.begin();
-  
-}
+  void setup() {
+    pinMode(xAxisPin, INPUT_PULLUP);   // X axis
+    pinMode(yAxisPin, INPUT_PULLUP);   // Y axis
+    pinMode(reverseGearPin, INPUT); // Reverse
 
-// Last state of the button
-int lastButtonState = 0;
-
-void loop() {
-
-  int x=analogRead(0);                 // X axis
-  int y=analogRead(2);                 // Y axis
-
-  int _isreverse = digitalRead(2);
-  int _gear_ = 0;
-
-if( _isreverse == 1 ){
-
-      _gear_ = 8;
-      b[DI_REVERSE]= 1;
-
-}else{ 
-  
-
-  if(b[DI_MODE]==0)                    // H-shifter mode?
-  {
-    if(x<HS_XAXIS_12)                  // Shifter on the left?
-    {
-      if(y>HS_YAXIS_135) _gear_=1;       // 1st gear
-      if(y<HS_YAXIS_246) _gear_=2;       // 2nd gear
-    }
-    else if(x>HS_XAXIS_56)             // Shifter on the right?
-    {
-      if(y>HS_YAXIS_135) _gear_=5;       // 5th gear
-      if(y<HS_YAXIS_246) _gear_=6;       // 6th gear
-     
-    }
-    else                               // Shifter is in the middle
-    {
-      if(y>HS_YAXIS_135) _gear_=3;       // 3rd gear
-      if(y<HS_YAXIS_246) _gear_=4;       // 4th gear
-    }
-   
+    // Initialize Joystick Library
+    Joystick.begin();
+    
+    // Initialize LedControl Library
+    lc.shutdown(0,false);       //The MAX72XX is in power-saving mode on startup
+    lc.setIntensity(0,1);      // Set the brightness to maximum value
+    lc.clearDisplay(0);         // and clear the display
   }
 
-}
-  
-  
-  if(gear!=6) b[DI_REVERSE]=0;         // Reverse gear is allowed only on 6th gear position
-  
-   if (_gear_ != gear ){
-      gear = _gear_;
-      desactivar();
-      Joystick.setButton(gear-1, HIGH);
-   }
-   delay(50);
-}
+  void loop() {
+    int x = analogRead(0);                 // X axis
+    int y = analogRead(1);                 // Y axis
+    int isreverse = digitalRead(2);        // Reverse
 
-void desactivar(){
-  // Depress virtual button for current gear
-  for(int i = 0; i <= 10 ; i++ )  Joystick.setButton(i, LOW);
-}
+    if(isreverse){
+      putGear(7);
+    } else
+    {
+      if(x < X_AXIS_12_ZONE)                  // Shifter on the left?
+      {
+        if(y > Y_AXIS_TOP_ZONE) putGear(1);
+        if(y < Y_AXIS_BOTTOM_ZONE) putGear(2);
+      }
+      else if(x > X_AXIS_56_ZONE)             // Shifter on the right?
+      {
+        if(y > Y_AXIS_TOP_ZONE) putGear(5);
+        if(y < Y_AXIS_BOTTOM_ZONE) putGear(6);
+      }
+      else                                    // Shifter is in the middle
+      {  
+        if(y > Y_AXIS_TOP_ZONE) putGear(3);
+        if(y < Y_AXIS_BOTTOM_ZONE) putGear(4);
+      }
+    }
+  }
 
+  void putGear(int gearno){
+    releaseGearsExceptCurrent(gearno);
+    displayGearInLEDMatrix(gearno);
+    Joystick.setButton(gearno - 1, HIGH);
+  }
+
+   void releaseGearsExceptCurrent(int gearno){
+     for(int i = 0; i <= TOTAL_BUTTONS ; i++ ){
+      if (i == gearno - 1) continue;
+      Joystick.setButton(i, LOW);  
+    }  
+  }
+
+  void displayGearInLEDMatrix(int gearno){
+    switch(gearno){
+      case 1:
+      printByte(one);  
+      break;
+    
+      case 2:
+      printByte(two);  
+      break;
+      
+      case 3:
+      printByte(three);  
+      break;
+      
+      case 4:
+      printByte(four);  
+      break;
+      
+      case 5:
+      printByte(five);  
+      break;
+      
+      case 6:
+      printByte(six);  
+      break;
+      
+      case 7:
+      printByte(reverse);  
+      break;
+      
+      default:
+      printByte(neutral); 
+    }
+  }
+
+  void printByte(byte character []){
+    int i = 0;
+    for(i=0; i < 8; i++)
+    lc.setRow(0,i,character[i]);
+  }
